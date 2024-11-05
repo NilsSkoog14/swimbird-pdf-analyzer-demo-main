@@ -62,9 +62,9 @@ def extract_tables_from_pdf(pdf_path):
                 df = df.dropna(how='all')  # Drop rows where all values are NaN
                 df = df.dropna(axis=1, how='all')  # Drop columns where all values are NaN
                 
-                # Remove rows that are mostly empty (more than 50% empty cells)
-                empty_threshold = len(df.columns) * 0.5
-                df = df[df.notna().sum(axis=1) > empty_threshold]
+                
+                df = df[~df.iloc[:, 1:].apply(lambda row: row.isna() | (row == ''), axis=1).all(axis=1)]
+                df = df.dropna(thresh=2, axis=1).replace('', pd.NA).dropna(thresh=2, axis=1)
                 
                 # Only return if we have a valid table
                 if not df.empty and len(df.columns) > 1 and len(df) > 1:
