@@ -9,7 +9,7 @@ const Header = () => {
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <div className="flex items-center cursor-pointer" onClick={() => navigate('/')}>
           <img 
-            src="/swimbird-logo.svg" 
+            src="Swimbirdlogo.jpeg" 
             alt="Swimbird Logo" 
             className="h-12 w-auto" 
           />
