@@ -5,6 +5,7 @@ import tabula
 import os
 import pdfplumber
 import camelot
+import numpy as np
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -29,15 +30,10 @@ def analyze_pdf():
         if tables is None or len(tables) == 0:
             return jsonify({'error': 'No tables found in PDF'}), 404
         
-        # Convert DataFrame to list format
-        result = {
-            'tables': [{
-                'columns': tables.columns.tolist(),
-                'rows': tables.values.tolist()
-            }]
-        }
+        # Clean and prepare data for JSON serialization
+        cleaned_tables = clean_dataframe_for_json(tables)
         
-        return jsonify(result)
+        return jsonify(cleaned_tables)
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -46,6 +42,27 @@ def analyze_pdf():
         # Clean up the temporary file
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+def clean_dataframe_for_json(df):
+    """Clean DataFrame to ensure JSON serialization."""
+    if df is None:
+        return {'tables': []}
+    
+    # Convert DataFrame to string type first
+    df = df.astype(str)
+    
+    # Replace 'nan' and 'NA' strings with None
+    df = df.replace({'nan': None, 'NA': None, 'NaN': None})
+    
+    # Convert DataFrame to the expected format
+    result = {
+        'tables': [{
+            'columns': df.columns.tolist(),
+            'rows': df.values.tolist()
+        }]
+    }
+    
+    return result
 
 def extract_tables_from_pdf(pdf_path):
     with pdfplumber.open(pdf_path) as pdf:
@@ -62,12 +79,13 @@ def extract_tables_from_pdf(pdf_path):
                 df = df.dropna(how='all')  # Drop rows where all values are NaN
                 df = df.dropna(axis=1, how='all')  # Drop columns where all values are NaN
                 
-                
+                # Remove rows that are mostly empty (more than 50% empty cells)
                 df = df[~df.iloc[:, 1:].apply(lambda row: row.isna() | (row == ''), axis=1).all(axis=1)]
                 df = df.dropna(thresh=2, axis=1).replace('', pd.NA).dropna(thresh=2, axis=1)
                 
-                # Only return if we have a valid table
-                if not df.empty and len(df.columns) > 1 and len(df) > 1:
+
+                # Check if the DataFrame has valid content before saving
+                if not df.empty and (df.notna().sum(axis=1) == 1).sum() < (len(df) / 2):
                     return df
     
     return None
