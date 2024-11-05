@@ -23,20 +23,18 @@ def analyze_pdf():
     file.save(temp_path)
     
     try:
-        # More advanced table extraction
+        # Extract tables from PDF
         tables = extract_tables_from_pdf(temp_path)
         
-        if not tables:
+        if tables is None or len(tables) == 0:
             return jsonify({'error': 'No tables found in PDF'}), 404
         
-        # Convert all tables to result format
+        # Convert DataFrame to list format
         result = {
-            'tables': [
-                {
-                    'columns': df.columns.tolist(),
-                    'rows': df.values.tolist()
-                } for df in tables
-            ]
+            'tables': [{
+                'columns': tables.columns.tolist(),
+                'rows': tables.values.tolist()
+            }]
         }
         
         return jsonify(result)
@@ -50,39 +48,29 @@ def analyze_pdf():
             os.remove(temp_path)
 
 def extract_tables_from_pdf(pdf_path):
-    # Create directory for CSV output if it doesn't exist
-    #os.makedirs(output_dir, exist_ok=True)
-    
-    # Open PDF
     with pdfplumber.open(pdf_path) as pdf:
-        # Track the number of tables for unique naming
-        table_count = 1
-        
-        # Process each page
         for i, page in enumerate(pdf.pages):
             print(f"Processing page {i + 1}...")
-
-            # Use Camelot to extract tables from the page
-            # Camelot works best when tables have clear borders (lattice mode)
-            tables = camelot.read_pdf(pdf_path, pages=str(i + 1), flavor="stream")  # use "lattice" if tables have borders
             
-            # Process each detected table
+            # Use Camelot to extract tables from the page
+            tables = camelot.read_pdf(pdf_path, pages=str(i + 1), flavor="stream")
+            
             for table in tables:
-                df = table.df  # Convert the Camelot table to a DataFrame
-                # Basic cleaning: Remove empty rows and columns
-                df.dropna(how='all', inplace=True)
-                df.dropna(axis=1, how='all', inplace=True)
-
-                # Additional cleaning to remove rows and columns that are mostly empty
-                df = df[~df.iloc[:, 1:].apply(lambda row: row.isna() | (row == ''), axis=1).all(axis=1)]
-                df = df.dropna(thresh=2, axis=1).replace('', pd.NA).dropna(thresh=2, axis=1)
+                df = table.df
                 
-                # Check if the DataFrame has valid content before saving
-                print((df.notna().sum(axis=1) == 1).sum() > (len(df) / 2))
-                print(len(df))
-                if not df.empty and (df.notna().sum(axis=1) == 1).sum() < (len(df) / 2):
-                    print(df)
+                # Basic cleaning
+                df = df.dropna(how='all')  # Drop rows where all values are NaN
+                df = df.dropna(axis=1, how='all')  # Drop columns where all values are NaN
+                
+                # Remove rows that are mostly empty (more than 50% empty cells)
+                empty_threshold = len(df.columns) * 0.5
+                df = df[df.notna().sum(axis=1) > empty_threshold]
+                
+                # Only return if we have a valid table
+                if not df.empty and len(df.columns) > 1 and len(df) > 1:
                     return df
+    
+    return None
 
 if __name__ == '__main__':
     app.run(debug=True)
